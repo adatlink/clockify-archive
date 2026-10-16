@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clockify-archive"
+version = "0.1.0"
+description = "Export a Clockify workspace into a portable JSON, CSV, and SQLite archive"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "clockify-archive contributors"}]
+keywords = ["clockify", "time-tracking", "backup", "archive", "payroll", "csv", "sqlite"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business",
+  "Topic :: System :: Archiving :: Backup",
+]
+
+dependencies = []
+
+[project.scripts]
+clockify-archive = "clockify_archive.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/your-org/clockify-archive#readme"
+
+[tool.setuptools.packages.find]
+include = ["clockify_archive*"]

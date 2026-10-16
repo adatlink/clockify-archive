@@ -1,0 +1,8 @@
+[tools]
+python = "3.11"
+
+[tasks.test]
+run = "python -m unittest discover -s tests -v"
+
+[tasks.check]
+run = "python -m compileall -q clockify_archive tests && python -m unittest discover -s tests -v"
