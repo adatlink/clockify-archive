@@ -34,7 +34,7 @@ class ClockifyClient:
         *,
         timeout: float = 60.0,
         retries: int = 4,
-        user_agent: str = "clockify-archive/0.1.0",
+        user_agent: str = "clockify-archive/0.1.1",
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")

@@ -1,6 +1,6 @@
 # clockify-archive
 
-`clockify-archive` creates a vendor-neutral, long-term archive of a Clockify workspace. It is designed as the export-side companion to `clockify-import` and follows the same lightweight approach: **Python 3.11+, standard library only, `argparse`, TOML configuration, and `CLOCKIFY_API_KEY` support**.
+`clockify-archive` creates a vendor-neutral, long-term archive of a Clockify workspace. It is designed as the export-side companion to [`adatlink/clockify-import`](https://github.com/adatlink/clockify-import) and follows the same lightweight approach: **Python 3.11+, standard library only, `argparse`, TOML configuration, and `CLOCKIFY_API_KEY` support**.
 
 The generated ZIP contains three complementary representations:
 
@@ -247,3 +247,10 @@ Implementation is based on Clockify API v1 documentation, including workspace, u
 ## License
 
 MIT. See `LICENSE`.
+
+### Optional paid features and permissions
+
+Some Clockify API endpoints depend on the workspace plan or on the API user's permissions. `clockify-archive` treats those endpoints as optional unless `--strict` is used. For repeated feature-level calls (for example project custom fields, time-off balances, and expense receipt downloads), an HTTP 401/402/403/405 is reported once and that feature is skipped for the remainder of the export. The archive continues with all other accessible data. Unavailable features are listed in `manifest.json` under `unavailable_optional_features`.
+
+HTTP 404 responses are not cached as feature-wide failures because they can refer to a single project, policy, or attachment.
+

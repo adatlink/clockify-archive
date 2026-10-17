@@ -53,6 +53,11 @@ class Archiver:
         self.options = options
         self.warnings: list[str] = []
         self.raw_pages: dict[str, Any] = {}
+        # Optional Clockify features can be unavailable because of the workspace
+        # subscription or the API user's permissions.  Remember feature-level
+        # access failures so repeated per-entity calls do not flood the console
+        # or waste API requests.
+        self.unavailable_features: dict[str, dict[str, Any]] = {}
 
     def log(self, message: str) -> None:
         if self.options.verbose:
@@ -62,13 +67,51 @@ class Archiver:
         self.warnings.append(message)
         print(f"warning: {message}", file=sys.stderr)
 
-    def _optional(self, label: str, fn: Callable[[], Any], default: Any) -> Any:
+    def _optional(
+        self,
+        label: str,
+        fn: Callable[[], Any],
+        default: Any,
+        *,
+        feature: str | None = None,
+        feature_label: str | None = None,
+    ) -> Any:
+        """Run an optional API call, gracefully handling unavailable features.
+
+        When ``feature`` is supplied, authorization/plan failures are remembered
+        for the rest of the run.  Subsequent calls for the same feature return
+        ``default`` without hitting the API or emitting another warning.
+
+        HTTP 404 is intentionally *not* cached: it can be specific to one
+        project/policy/attachment rather than proving that the feature is
+        unavailable workspace-wide.
+        """
+        if feature and feature in self.unavailable_features:
+            self.log(f"Skipping {label}: optional feature '{feature}' is unavailable.")
+            return default
+
         try:
             return fn()
         except ClockifyAPIError as exc:
             if self.options.strict or exc.status not in (400, 401, 402, 403, 404, 405, 409):
                 raise
-            self.warn(f"{label} not archived: HTTP {exc.status}. This may require a paid feature or additional permission.")
+
+            if feature and exc.status in (401, 402, 403, 405):
+                display = feature_label or label
+                self.unavailable_features[feature] = {
+                    "label": display,
+                    "http_status": exc.status,
+                }
+                self.warn(
+                    f"{display} not archived: HTTP {exc.status}. "
+                    "Further requests for this optional feature will be skipped. "
+                    "This may require a paid Clockify feature or additional permission."
+                )
+            else:
+                self.warn(
+                    f"{label} not archived: HTTP {exc.status}. "
+                    "This may require a paid feature or additional permission."
+                )
             return default
 
     def resolve_workspace(self) -> dict[str, Any]:
@@ -118,7 +161,13 @@ class Archiver:
         data["tags"] = dedupe_by_id(tags)
 
         data["user_groups"] = self._paged_get("user_groups", f"/workspaces/{wid}/user-groups", params={"includeTeamManagers": "true"})
-        data["custom_fields"] = self._optional("custom fields", lambda: self.client.get(f"/workspaces/{wid}/custom-fields").data or [], [])
+        data["custom_fields"] = self._optional(
+            "custom fields",
+            lambda: self.client.get(f"/workspaces/{wid}/custom-fields").data or [],
+            [],
+            feature="custom_fields",
+            feature_label="custom fields",
+        )
 
         tasks_by_project: dict[str, list[Any]] = {}
         project_custom_fields: dict[str, list[Any]] = {}
@@ -134,6 +183,8 @@ class Archiver:
                 f"project custom fields for {pid}",
                 lambda pid=pid: self.client.get(f"/workspaces/{wid}/projects/{pid}/custom-fields").data or [],
                 [],
+                feature="project_custom_fields",
+                feature_label="project custom fields",
             )
         data["tasks_by_project"] = tasks_by_project
         data["project_custom_fields"] = project_custom_fields
@@ -171,6 +222,8 @@ class Archiver:
                     f"time off balances for policy {pid}",
                     lambda pid=pid: self._paged_get(f"time_off_balance_{pid}", f"/workspaces/{wid}/time-off/balance/policy/{pid}"),
                     [],
+                    feature="time_off_balances",
+                    feature_label="time off balances",
                 )
         data["time_off_balances_by_policy"] = balances
 
@@ -219,10 +272,15 @@ class Archiver:
             if not eid or not fid:
                 continue
             dest = root / "attachments" / "receipts" / f"{eid}_{fid}"
-            try:
-                self.client.download(f"/workspaces/{wid}/expenses/{eid}/files/{fid}", dest)
-            except ClockifyAPIError as exc:
-                self.warn(f"receipt {eid}/{fid} not downloaded: HTTP {exc.status}")
+            self._optional(
+                f"expense receipt {eid}/{fid}",
+                lambda eid=eid, fid=fid, dest=dest: self.client.download(
+                    f"/workspaces/{wid}/expenses/{eid}/files/{fid}", dest
+                ),
+                None,
+                feature="expense_receipts",
+                feature_label="expense receipt downloads",
+            )
 
     @staticmethod
     def _counts(data: dict[str, Any]) -> dict[str, int]:
@@ -273,6 +331,7 @@ class Archiver:
             "range": {"start": self.options.start, "end": self.options.end},
             "counts": counts,
             "warnings": self.warnings,
+            "unavailable_optional_features": self.unavailable_features,
         }
 
         if self.options.raw:
