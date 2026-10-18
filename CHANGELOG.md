@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 - 2026-09-28
+
+- Make ZIP creation optional; normal exports now remain as directory archives.
+- Add `--zip` to create a compressed copy beside the directory archive.
+- Add `--date-subdirs` to scaffold output as `YEAR/MONTH/DAY` using the UTC export date.
+- Keep explicit `.zip` output paths working for backward compatibility.
+- Preserve both the directory and ZIP when ZIP output is requested.
+
 ## 0.1.1
 
 - Cache optional-feature access failures during an export.

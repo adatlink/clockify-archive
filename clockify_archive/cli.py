@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="clockify-archive",
         description="Export a Clockify workspace into a portable JSON + CSV + SQLite archive.",
     )
-    p.add_argument("output", nargs="?", default=".", help="Output directory or explicit .zip path (default: current directory)")
+    p.add_argument("output", nargs="?", default=".", help="Output root directory (default: current directory); explicit .zip paths remain supported for backward compatibility")
     p.add_argument("-w", "--workspace", help="Workspace ID or exact workspace name")
     p.add_argument("--api-key", help="Clockify API key (prefer CLOCKIFY_API_KEY or config file)")
     p.add_argument("--base-url", help="Clockify API base URL; useful for regional/subdomain deployments")
@@ -31,7 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-receipts", action="store_true", help="Do not download expense receipt attachments")
     p.add_argument("--no-deleted", action="store_true", help="Do not attempt the experimental deleted-entities export")
     p.add_argument("--strict", action="store_true", help="Fail if an optional paid/permission-protected endpoint cannot be archived")
-    p.add_argument("--keep-directory", action="store_true", help="Keep the unpacked archive directory next to the ZIP")
+    p.add_argument("--zip", action="store_true", dest="create_zip", help="Also create a ZIP copy beside the exported archive directory")
+    p.add_argument("--date-subdirs", action="store_true", help="Create YEAR/MONTH/DAY subdirectories below the output root using the export date (UTC)")
     p.add_argument("--csv-delimiter", default=",", choices=[",", ";", "\t"], help="Delimiter for normalized CSV files")
     p.add_argument("--list-workspaces", action="store_true", help="List visible workspaces and exit")
     p.add_argument("--init-config", nargs="?", const=str(CONFIG_CANDIDATES[0]), help="Write an example config file and exit")
@@ -83,14 +84,15 @@ def main(argv: list[str] | None = None) -> int:
             receipts=not args.no_receipts,
             include_deleted=not args.no_deleted,
             strict=args.strict,
-            keep_directory=args.keep_directory,
+            create_zip=args.create_zip,
+            date_subdirs=args.date_subdirs,
             csv_delimiter=args.csv_delimiter,
             verbose=args.verbose,
         )
         result = Archiver(client, options).run()
-        print(result.zip_path)
+        print(result.zip_path if result.zip_path is not None else result.archive_dir)
         if result.warnings:
-            print(f"Completed with {len(result.warnings)} warning(s). See manifest.json inside the archive.", file=sys.stderr)
+            print(f"Completed with {len(result.warnings)} warning(s). See manifest.json inside the archive directory.", file=sys.stderr)
         return 0
     except (RuntimeError, ValueError, FileExistsError) as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -1,8 +1,8 @@
 # clockify-archive
 
-`clockify-archive` creates a vendor-neutral, long-term archive of a Clockify workspace. It is designed as the export-side companion to [`adatlink/clockify-import`](https://github.com/adatlink/clockify-import) and follows the same lightweight approach: **Python 3.11+, standard library only, `argparse`, TOML configuration, and `CLOCKIFY_API_KEY` support**.
+`clockify-archive` creates a vendor-neutral, long-term archive of a Clockify workspace. It is designed as the export-side companion to `clockify-import` and follows the same lightweight approach: **Python 3.11+, standard library only, `argparse`, TOML configuration, and `CLOCKIFY_API_KEY` support**.
 
-The generated ZIP contains three complementary representations:
+The generated archive directory contains three complementary representations:
 
 - **Raw JSON** — Clockify API objects and page responses, retaining native IDs and Clockify-specific fields.
 - **Normalized UTF-8 CSV** — portable tables for payroll, ERP, BI, spreadsheets, and import scripts.
@@ -104,17 +104,31 @@ Archive a date range:
 clockify-archive -w "YOUR_WORKSPACE" --from 2024-01-01 --to 2026-09-25 ./archives
 ```
 
-Create a specifically named ZIP:
+By default, the export remains as a normal directory. To also create a ZIP copy beside it:
 
 ```bash
-clockify-archive -w 64a687e29ae1f428e7ebe303 ./clockify-full-backup.zip
+clockify-archive -w "YOUR_WORKSPACE" --zip ./archives
 ```
 
-Keep the unpacked directory as well as the ZIP:
+To organize recurring exports automatically under `YEAR/MONTH/DAY`:
 
 ```bash
-clockify-archive -w "YOUR_WORKSPACE" --keep-directory ./archives
+clockify-archive -w "YOUR_WORKSPACE" --date-subdirs ./archives
 ```
+
+For example, an export on 2026-09-28 is written below:
+
+```text
+./archives/2026/09/28/clockify-your-workspace-20260928-150000/
+```
+
+The options can be combined; the ZIP is created beside the directory:
+
+```bash
+clockify-archive -w "YOUR_WORKSPACE" --date-subdirs --zip ./archives
+```
+
+For compatibility with v0.1.x, an explicit `.zip` output path still creates a ZIP, but the preferred interface is `--zip`.
 
 For an EU/US/UK/AU regional workspace, set the API URL shown by Clockify's API documentation, for example:
 
@@ -124,7 +138,7 @@ clockify-archive --base-url https://euc1.clockify.me/api/v1 -w "YOUR_WORKSPACE" 
 
 ## Generated archive
 
-A typical ZIP expands to:
+A typical archive directory looks like:
 
 ```text
 clockify-your-workspace-20260925-150000/
@@ -231,7 +245,8 @@ Rates and monetary values are preserved as returned by Clockify. Consumers shoul
 --no-receipts          Do not download expense receipts
 --no-deleted           Do not query deleted entities
 --strict               Fail on unavailable optional endpoints
---keep-directory       Keep unpacked archive directory
+--zip                  Also create a ZIP copy beside the archive directory
+--date-subdirs         Store exports below YEAR/MONTH/DAY directories
 --csv-delimiter        ',', ';', or tab
 --list-workspaces      List visible workspaces
 --init-config [PATH]   Write example TOML config

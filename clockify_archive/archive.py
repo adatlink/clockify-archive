@@ -34,15 +34,16 @@ class ArchiveOptions:
     receipts: bool = True
     include_deleted: bool = True
     strict: bool = False
-    keep_directory: bool = False
+    create_zip: bool = False
+    date_subdirs: bool = False
     csv_delimiter: str = ","
     verbose: bool = False
 
 
 @dataclass
 class ArchiveResult:
-    zip_path: Path
-    archive_dir: Path | None
+    archive_dir: Path
+    zip_path: Path | None = None
     warnings: list[str] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
 
@@ -300,18 +301,25 @@ class Archiver:
         self.log(f"Archiving workspace {workspace_hint.get('name')} ({wid})")
         data = self.collect(wid)
         workspace = data.get("workspace") or workspace_hint
-        timestamp = utc_now().strftime("%Y%m%d-%H%M%S")
+        exported_at = utc_now()
+        timestamp = exported_at.strftime("%Y%m%d-%H%M%S")
         basename = f"clockify-{slugify(workspace.get('name', 'workspace'))}-{timestamp}"
 
         output = self.options.output
-        if output.suffix.lower() == ".zip":
-            zip_path = output
+        explicit_zip = output.suffix.lower() == ".zip"
+        if explicit_zip:
+            # Backward compatibility with v0.1.x: an explicit .zip output path
+            # still requests ZIP creation, but the unpacked archive is now kept
+            # as the primary archive representation.
             parent = output.parent
             archive_dir = parent / output.stem
+            zip_path: Path | None = output
         else:
             parent = output
+            if self.options.date_subdirs:
+                parent = parent / exported_at.strftime("%Y") / exported_at.strftime("%m") / exported_at.strftime("%d")
             archive_dir = parent / basename
-            zip_path = parent / f"{basename}.zip"
+            zip_path = parent / f"{basename}.zip" if self.options.create_zip else None
         parent.mkdir(parents=True, exist_ok=True)
         if archive_dir.exists():
             shutil.rmtree(archive_dir)
@@ -323,7 +331,7 @@ class Archiver:
             "format_version": "1.0",
             "tool": "clockify-archive",
             "tool_version": __version__,
-            "exported_at": iso_z(utc_now()),
+            "exported_at": iso_z(exported_at),
             "source": "Clockify API v1",
             "api_base_url": self.client.base_url,
             "workspace_id": wid,
@@ -359,13 +367,11 @@ class Archiver:
             checksum_lines.append(f"{sha256_file(path)}  {path.relative_to(archive_dir).as_posix()}")
         (archive_dir / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
 
-        if zip_path.exists():
-            zip_path.unlink()
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-            for path in sorted(p for p in archive_dir.rglob("*") if p.is_file()):
-                zf.write(path, f"{archive_dir.name}/{path.relative_to(archive_dir).as_posix()}")
+        if zip_path is not None:
+            if zip_path.exists():
+                zip_path.unlink()
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+                for path in sorted(p for p in archive_dir.rglob("*") if p.is_file()):
+                    zf.write(path, f"{archive_dir.name}/{path.relative_to(archive_dir).as_posix()}")
 
-        kept = archive_dir if self.options.keep_directory else None
-        if not self.options.keep_directory:
-            shutil.rmtree(archive_dir)
-        return ArchiveResult(zip_path=zip_path, archive_dir=kept, warnings=self.warnings, counts=counts)
+        return ArchiveResult(archive_dir=archive_dir, zip_path=zip_path, warnings=self.warnings, counts=counts)
