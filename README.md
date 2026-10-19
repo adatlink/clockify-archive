@@ -98,37 +98,86 @@ Archive the complete history of a workspace:
 clockify-archive -w "YOUR_WORKSPACE" ./archives
 ```
 
+By default, the archive contents are written **directly into the selected output directory**:
+
+```text
+./archives/
+├── manifest.json
+├── README.txt
+├── SHA256SUMS
+├── raw/
+├── csv/
+└── database/
+```
+
+The tool removes/replaces only its own managed archive paths on a repeated export; unrelated files already present in the output directory are preserved.
+
 Archive a date range:
 
 ```bash
 clockify-archive -w "YOUR_WORKSPACE" --from 2024-01-01 --to 2026-09-25 ./archives
 ```
 
-By default, the export remains as a normal directory. To also create a ZIP copy beside it:
+To create the timestamped wrapper directory used by earlier releases, add `--archive-subdir`:
+
+```bash
+clockify-archive -w "YOUR_WORKSPACE" --archive-subdir ./archives
+```
+
+which produces, for example:
+
+```text
+./archives/clockify-your-workspace-20260929-061500/
+```
+
+ZIP creation is optional. With the default direct layout, `--zip` creates the ZIP inside the output directory:
 
 ```bash
 clockify-archive -w "YOUR_WORKSPACE" --zip ./archives
 ```
 
-To organize recurring exports automatically under `YEAR/MONTH/DAY`:
+For example:
+
+```text
+./archives/
+├── manifest.json
+├── raw/
+├── csv/
+├── database/
+└── clockify-your-workspace-20260929-061500.zip
+```
+
+When `--archive-subdir` and `--zip` are combined, the ZIP is placed beside the wrapper directory.
+
+To organize recurring exports under `YEAR/MONTH/DAY`:
 
 ```bash
 clockify-archive -w "YOUR_WORKSPACE" --date-subdirs ./archives
 ```
 
-For example, an export on 2026-09-28 is written below:
+An export on 2026-09-29 is then written directly into:
 
 ```text
-./archives/2026/09/28/clockify-your-workspace-20260928-150000/
+./archives/2026/09/29/
+├── manifest.json
+├── raw/
+├── csv/
+└── database/
 ```
 
-The options can be combined; the ZIP is created beside the directory:
+The options can be combined. For example, to retain one timestamped directory per run within the date hierarchy:
 
 ```bash
-clockify-archive -w "YOUR_WORKSPACE" --date-subdirs --zip ./archives
+clockify-archive -w "YOUR_WORKSPACE" --date-subdirs --archive-subdir ./archives
 ```
 
-For compatibility with v0.1.x, an explicit `.zip` output path still creates a ZIP, but the preferred interface is `--zip`.
+which produces:
+
+```text
+./archives/2026/09/29/clockify-your-workspace-20260929-061500/
+```
+
+For compatibility with v0.1.x, an explicit `.zip` output path still creates a ZIP and a matching unpacked directory. The preferred interface is an output directory plus `--zip` when compression is wanted.
 
 For an EU/US/UK/AU regional workspace, set the API URL shown by Clockify's API documentation, for example:
 
@@ -138,10 +187,10 @@ clockify-archive --base-url https://euc1.clockify.me/api/v1 -w "YOUR_WORKSPACE" 
 
 ## Generated archive
 
-A typical archive directory looks like:
+A typical output directory looks like this (the optional `clockify-.../` wrapper appears only with `--archive-subdir`):
 
 ```text
-clockify-your-workspace-20260925-150000/
+./archives/
 ├── manifest.json
 ├── README.txt
 ├── SHA256SUMS
@@ -214,12 +263,14 @@ ORDER BY hours DESC;
 
 ## Integrity verification
 
-Every archive contains `SHA256SUMS` covering all generated files except `SHA256SUMS` itself:
+Every archive contains `SHA256SUMS` covering all generated Clockify archive files except `SHA256SUMS` itself. With the default direct layout:
 
 ```bash
-cd clockify-your-workspace-20260925-150000
+cd ./archives
 sha256sum -c SHA256SUMS
 ```
+
+If `--archive-subdir` is used, run the same command from inside that timestamped subdirectory.
 
 ## Important limitations
 
@@ -245,8 +296,9 @@ Rates and monetary values are preserved as returned by Clockify. Consumers shoul
 --no-receipts          Do not download expense receipts
 --no-deleted           Do not query deleted entities
 --strict               Fail on unavailable optional endpoints
---zip                  Also create a ZIP copy beside the archive directory
+--zip                  Also create a ZIP copy of the archive
 --date-subdirs         Store exports below YEAR/MONTH/DAY directories
+--archive-subdir       Put the export in clockify-WORKSPACE-DATE-TIME/
 --csv-delimiter        ',', ';', or tab
 --list-workspaces      List visible workspaces
 --init-config [PATH]   Write example TOML config

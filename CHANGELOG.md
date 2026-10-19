@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-09-29
+
+- Write archive contents directly into the selected output directory by default.
+- Add `--archive-subdir` to optionally create the `clockify-WORKSPACE-DATE-TIME/` wrapper directory.
+- With `--date-subdirs`, write directly into `YEAR/MONTH/DAY/` unless `--archive-subdir` is also specified.
+- Preserve unrelated files in direct output directories while replacing only Clockify-managed archive paths.
+- With direct output and `--zip`, place the ZIP inside the output directory; with `--archive-subdir`, keep the ZIP beside the wrapper directory.
+- Restrict checksums and ZIP contents to files managed by `clockify-archive`.
+
 ## 0.2.0 - 2026-09-28
 
 - Make ZIP creation optional; normal exports now remain as directory archives.

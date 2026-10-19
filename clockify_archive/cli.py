@@ -31,8 +31,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-receipts", action="store_true", help="Do not download expense receipt attachments")
     p.add_argument("--no-deleted", action="store_true", help="Do not attempt the experimental deleted-entities export")
     p.add_argument("--strict", action="store_true", help="Fail if an optional paid/permission-protected endpoint cannot be archived")
-    p.add_argument("--zip", action="store_true", dest="create_zip", help="Also create a ZIP copy beside the exported archive directory")
+    p.add_argument(
+        "--zip",
+        action="store_true",
+        dest="create_zip",
+        help="Also create a ZIP copy (inside the direct output directory, or beside it when --archive-subdir is used)",
+    )
     p.add_argument("--date-subdirs", action="store_true", help="Create YEAR/MONTH/DAY subdirectories below the output root using the export date (UTC)")
+    p.add_argument(
+        "--archive-subdir",
+        action="store_true",
+        help="Place the export inside a clockify-WORKSPACE-DATE-TIME subdirectory instead of writing directly to the output directory",
+    )
     p.add_argument("--csv-delimiter", default=",", choices=[",", ";", "\t"], help="Delimiter for normalized CSV files")
     p.add_argument("--list-workspaces", action="store_true", help="List visible workspaces and exit")
     p.add_argument("--init-config", nargs="?", const=str(CONFIG_CANDIDATES[0]), help="Write an example config file and exit")
@@ -86,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             strict=args.strict,
             create_zip=args.create_zip,
             date_subdirs=args.date_subdirs,
+            archive_subdir=args.archive_subdir,
             csv_delimiter=args.csv_delimiter,
             verbose=args.verbose,
         )

@@ -36,6 +36,7 @@ class ArchiveOptions:
     strict: bool = False
     create_zip: bool = False
     date_subdirs: bool = False
+    archive_subdir: bool = False
     csv_delimiter: str = ","
     verbose: bool = False
 
@@ -295,6 +296,44 @@ class Archiver:
                 counts[key] = sum(len(v or []) if isinstance(v, list) else 1 for v in value.values())
         return counts
 
+    @staticmethod
+    def _clear_managed_output(root: Path) -> None:
+        """Remove only files/directories owned by clockify-archive.
+
+        This is used when the archive is written directly into a caller-provided
+        output directory.  Unrelated files in that directory are deliberately
+        preserved.
+        """
+        for name in ("raw", "csv", "database", "attachments"):
+            path = root / name
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        for name in ("manifest.json", "README.txt", "SHA256SUMS"):
+            path = root / name
+            if path.exists():
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+
+    @staticmethod
+    def _managed_files(root: Path, *, include_checksums: bool = True) -> list[Path]:
+        files: list[Path] = []
+        for name in ("raw", "csv", "database", "attachments"):
+            path = root / name
+            if path.is_dir():
+                files.extend(p for p in path.rglob("*") if p.is_file())
+        top_level = ["manifest.json", "README.txt"]
+        if include_checksums:
+            top_level.append("SHA256SUMS")
+        for name in top_level:
+            path = root / name
+            if path.is_file():
+                files.append(path)
+        return sorted(set(files))
+
     def run(self) -> ArchiveResult:
         workspace_hint = self.resolve_workspace()
         wid = workspace_hint["id"]
@@ -307,23 +346,35 @@ class Archiver:
 
         output = self.options.output
         explicit_zip = output.suffix.lower() == ".zip"
+        zip_prefix: str | None = None
         if explicit_zip:
             # Backward compatibility with v0.1.x: an explicit .zip output path
-            # still requests ZIP creation, but the unpacked archive is now kept
-            # as the primary archive representation.
+            # still uses a matching unpacked directory and requests ZIP creation.
             parent = output.parent
             archive_dir = parent / output.stem
             zip_path: Path | None = output
+            zip_prefix = archive_dir.name
+            parent.mkdir(parents=True, exist_ok=True)
+            if archive_dir.exists():
+                shutil.rmtree(archive_dir)
+            archive_dir.mkdir(parents=True)
         else:
             parent = output
             if self.options.date_subdirs:
                 parent = parent / exported_at.strftime("%Y") / exported_at.strftime("%m") / exported_at.strftime("%d")
-            archive_dir = parent / basename
-            zip_path = parent / f"{basename}.zip" if self.options.create_zip else None
-        parent.mkdir(parents=True, exist_ok=True)
-        if archive_dir.exists():
-            shutil.rmtree(archive_dir)
-        archive_dir.mkdir(parents=True)
+            parent.mkdir(parents=True, exist_ok=True)
+
+            if self.options.archive_subdir:
+                archive_dir = parent / basename
+                zip_prefix = archive_dir.name
+                if archive_dir.exists():
+                    shutil.rmtree(archive_dir)
+                archive_dir.mkdir(parents=True)
+                zip_path = parent / f"{basename}.zip" if self.options.create_zip else None
+            else:
+                archive_dir = parent
+                self._clear_managed_output(archive_dir)
+                zip_path = archive_dir / f"{basename}.zip" if self.options.create_zip else None
 
         counts = self._counts(data)
         manifest = {
@@ -337,6 +388,11 @@ class Archiver:
             "workspace_id": wid,
             "workspace_name": workspace.get("name", ""),
             "range": {"start": self.options.start, "end": self.options.end},
+            "layout": {
+                "date_subdirs": self.options.date_subdirs,
+                "archive_subdir": self.options.archive_subdir or explicit_zip,
+                "zip_created": zip_path is not None,
+            },
             "counts": counts,
             "warnings": self.warnings,
             "unavailable_optional_features": self.unavailable_features,
@@ -363,7 +419,7 @@ class Archiver:
         )
 
         checksum_lines = []
-        for path in sorted(p for p in archive_dir.rglob("*") if p.is_file() and p.name != "SHA256SUMS"):
+        for path in self._managed_files(archive_dir, include_checksums=False):
             checksum_lines.append(f"{sha256_file(path)}  {path.relative_to(archive_dir).as_posix()}")
         (archive_dir / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
 
@@ -371,7 +427,9 @@ class Archiver:
             if zip_path.exists():
                 zip_path.unlink()
             with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-                for path in sorted(p for p in archive_dir.rglob("*") if p.is_file()):
-                    zf.write(path, f"{archive_dir.name}/{path.relative_to(archive_dir).as_posix()}")
+                for path in self._managed_files(archive_dir):
+                    relative = path.relative_to(archive_dir).as_posix()
+                    arcname = f"{zip_prefix}/{relative}" if zip_prefix else relative
+                    zf.write(path, arcname)
 
         return ArchiveResult(archive_dir=archive_dir, zip_path=zip_path, warnings=self.warnings, counts=counts)
